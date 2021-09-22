@@ -263,5 +263,35 @@ namespace PCAxis.PxExtend
 
 			return table;
 		}
+
+		#region Statistics Denmark additions
+
+		public static DataTable SortForPxChartUsage(this DataTable d)
+		{
+			if ((from series in d.Rows.OfType<DataRow>() select series.ItemArray.First()).Distinct().Count() > 1)
+				throw new PxExtendExceptions.PxExtendException("Sort can only be used on datasets with only one series.");
+
+			DataTable sorted = new DataTable();
+
+			sorted.Columns.AddRange(
+				(from c in d.Columns.OfType<DataColumn>() select new DataColumn(c.ColumnName, c.DataType)).ToArray()
+			);
+
+			var baseRows = from r in d.Rows.OfType<DataRow>() orderby r.ItemArray.Last() descending select r;
+
+			foreach (DataRow baseRow in baseRows)
+			{
+				DataRow sortedRow = sorted.NewRow();
+				for (int i = 0; i < baseRow.ItemArray.Length; i++)
+				{
+					sortedRow[i] = baseRow[i];
+				}
+				sorted.Rows.Add(sortedRow);
+			}
+
+			return sorted;
+		}
+
+		#endregion Statistics Denmark additions
 	}
 }

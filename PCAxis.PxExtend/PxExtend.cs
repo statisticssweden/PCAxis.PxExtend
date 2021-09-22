@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -513,5 +514,87 @@ namespace PCAxis.PxExtend
 
 			return s.Substring(0, 1).ToUpper() + (s.Length > 1 ? s.Substring(1) : "");
 		}
+
+		#region Statistics Denmark additions
+
+		public static PXModel CreatePxModel(FileInfo file, bool loadData)
+		{
+			PXFileBuilder builder = new PXFileBuilder();
+			builder.SetPath(file.FullName);
+			builder.BuildForSelection();
+
+			if (!loadData)
+				return builder.Model;
+
+			builder.BuildForPresentation(Selection.SelectAll(builder.Model.Meta));
+			return builder.Model;
+		}
+
+		public static PXModel CreatePxModel(string filePath, int itterateVariable, int itterateValue)
+		{
+			PXModel px = CreatePxModel(filePath, false);
+			return CreatePxModel(filePath, px.Meta.Variables[itterateVariable].Code, px.Meta.Variables[itterateVariable].Values[itterateValue].Code);
+		}
+
+		public static PXModel CreatePxModel(string filePath, string itterateVariableCode, string itterateValueCode)
+		{
+			PXFileBuilder builder = new PXFileBuilder();
+			builder.SetPath(filePath);
+			builder.BuildForSelection();
+
+			List<Selection> selections = new List<Selection>();
+
+			foreach (Variable variable in builder.Model.Meta.Variables)
+			{
+				if (variable.Code != itterateVariableCode)
+					selections.Add(Selection.SelectAll(variable));
+				else
+					selections.Add(new Selection(variable.Code).AddValueCode(itterateValueCode));
+			}
+
+			builder.BuildForPresentation(selections.ToArray());
+
+			return builder.Model;
+		}
+
+		public static Selection AddValueCode(this Selection s, string valueCode)
+		{
+			s.ValueCodes.Add(valueCode);
+			return s;
+		}
+
+		public static PXModel Xerox(this PXModel px)
+		{
+			BinaryFormatter b = new BinaryFormatter();
+			MemoryStream m = new MemoryStream();
+			b.Serialize(m, px);
+			m.Seek(0, SeekOrigin.Begin);
+
+			PXModel xeroxed = (PXModel)b.Deserialize(m);
+			return xeroxed;
+		}
+
+		public static PXModel PrepareForPopulationPyramid(this PXModel px, string maleValueName)
+		{
+			px = px.Xerox();
+
+			if (!px.Meta.Variables.Any(x => x.Values.Any(z => z.Value.ToLower() == maleValueName.ToLower())))
+				throw new PxExtendExceptions.PxExtendException("No variables contains a value with the supplied male value name.");
+
+			DataTable dt = px.AsDataTable();
+
+			int count = -1;
+			foreach (DataRow row in dt.Rows)
+			{
+				count++;
+
+				if (row.ItemArray.Select(x => x.ToString().ToLower()).Contains(maleValueName.ToLower()) && px.Data.ReadElement(count) > 0)
+					px.Data.WriteElement(count, Math.Abs(px.Data.ReadElement(count)) * -1);
+			}
+
+			return px;
+		}
+
+		#endregion Statistics Denmark additions
 	}
 }
